@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LocalDownloader</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #000;
+    --card: #1c1c1e;
+    --card-hover: #2c2c2e;
+    --fill: rgba(255,255,255,0.06);
+    --line: rgba(255,255,255,0.10);
+    --text: #f5f5f7;
+    --text2: #a1a1a6;
+    --blue: #0a84ff;
+    --green: #30d158;
+    --red: #ff453a;
+    --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  html { -webkit-font-smoothing: antialiased; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.47;
+    padding: 56px 20px 80px;
+  }
+
+  .wrap { max-width: 620px; margin: 0 auto; }
+
+  header { text-align: center; margin-bottom: 36px; }
+  h1 {
+    font-size: 32px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .sub { color: var(--text2); font-size: 15px; margin-top: 8px; }
+
+  .card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 14px;
+    transition: background 0.3s var(--ease);
+  }
+
+  .urlrow { display: flex; gap: 10px; }
+  input[type="text"] {
+    flex: 1;
+    background: var(--fill);
+    border: none;
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 15px;
+    font-family: inherit;
+    color: var(--text);
+    transition: box-shadow 0.25s var(--ease), background 0.25s var(--ease);
+  }
+  input[type="text"]::placeholder { color: #6e6e73; }
+  input[type="text"]:focus {
+    outline: none;
+    background: rgba(255,255,255,0.09);
+    box-shadow: 0 0 0 3.5px rgba(10,132,255,0.45);
+  }
+
+  button {
+    border: none;
+    border-radius: 10px;
+    background: var(--fill);
+    color: var(--text);
+    padding: 12px 18px;
+    font-size: 15px;
+    font-family: inherit;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.25s var(--ease), transform 0.15s var(--ease), opacity 0.25s var(--ease);
+  }
+  button:hover { background: var(--card-hover); }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.45; pointer-events: none; }
+
+  .primary { background: var(--blue); color: #fff; font-weight: 600; }
+  .primary:hover { background: #3395ff; }
+  .wide { width: 100%; padding: 13px; border-radius: 12px; }
+
+  /* --- preview --- */
+  .preview { display: none; }
+  .preview.show { display: flex; animation: rise 0.4s var(--ease) both; }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+  }
+  .preview { gap: 14px; align-items: center; margin-top: 16px; }
+  .thumb {
+    width: 148px; height: 84px;
+    object-fit: cover;
+    border-radius: 10px;
+    background: var(--fill);
+    flex-shrink: 0;
+  }
+  .meta { min-width: 0; }
+  .title {
+    font-weight: 600;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .sub2 { color: var(--text2); font-size: 13px; margin-top: 4px; }
+
+  /* --- options --- */
+  .options { display: none; }
+  .options.show { display: block; animation: rise 0.4s var(--ease) 0.06s both; }
+
+  .optrow { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+
+  .seg { display: flex; background: var(--fill); border-radius: 10px; padding: 3px; }
+  .seg button {
+    background: transparent;
+    border-radius: 8px;
+    padding: 8px 22px;
+    font-size: 14px;
+    color: var(--text2);
+    transition: background 0.3s var(--ease), color 0.3s var(--ease);
+  }
+  .seg button:hover { background: transparent; }
+  .seg button.active {
+    background: #48484a;
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  label.sel {
+    color: var(--text2);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  select {
+    background: var(--fill);
+    color: var(--text);
+    border: none;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.25s var(--ease);
+  }
+  select:hover { background: var(--card-hover); }
+  select:focus { outline: none; box-shadow: 0 0 0 3.5px rgba(10,132,255,0.45); }
+  select option { background: #1c1c1e; color: var(--text); }
+
+  /* --- progress --- */
+  .progress { display: none; }
+  .progress.show { display: block; animation: rise 0.35s var(--ease) both; }
+  .bar {
+    height: 6px;
+    background: var(--fill);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 16px;
+  }
+  .fill {
+    height: 100%;
+    width: 0%;
+    background: var(--blue);
+    border-radius: 3px;
+    transition: width 0.4s var(--ease);
+  }
+  .ptext {
+    display: flex;
+    justify-content: space-between;
+    color: var(--text2);
+    font-size: 13px;
+    margin-top: 8px;
+  }
+  .status-line {
+    font-size: 14px;
+    color: var(--green);
+  }
+  .donerow {
+    display: none;
+    gap: 12px;
+    align-items: center;
+    margin-top: 12px;
+  }
+  .donerow.show { display: flex; animation: rise 0.35s var(--ease) both; }
+  .smallbtn {
+    padding: 6px 12px;
+    font-size: 13px;
+    border-radius: 8px;
+    background: var(--fill);
+    flex-shrink: 0;
+  }
+  .saveto {
+    display: none;
+    color: var(--text2);
+    font-size: 12px;
+    margin-top: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .saveto.show { display: block; animation: rise 0.3s var(--ease) both; }
+
+  .error-box {
+    display: none;
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: rgba(255,69,58,0.12);
+    border-radius: 10px;
+    color: var(--red);
+    font-size: 14px;
+  }
+  .error-box.show { display: block; animation: rise 0.3s var(--ease) both; }
+
+  /* --- files --- */
+  .files-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .files-head h2 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .filelist { display: flex; flex-direction: column; }
+  .file {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 4px;
+    font-size: 14px;
+    border-top: 1px solid var(--line);
+    transition: background 0.25s var(--ease);
+  }
+  .file:first-child { border-top: none; }
+  .fext {
+    color: var(--text2);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    width: 30px;
+    flex-shrink: 0;
+  }
+  .fname {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+    text-decoration: none;
+    transition: color 0.2s var(--ease);
+  }
+  .fname:hover { color: var(--blue); }
+  .fsize { color: var(--text2); font-size: 13px; flex-shrink: 0; }
+  .empty { color: var(--text2); font-size: 14px; text-align: center; padding: 16px 0; }
+
+  .hint {
+    color: #6e6e73;
+    font-size: 12px;
+    text-align: center;
+    margin-top: 20px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>LocalDownloader</h1>
+    <div class="sub">Paste a link. Choose MP4 or MP3. Saved to your PC.</div>
+  </header>
+
+  <div class="card">
+    <div class="urlrow">
+      <input type="text" id="url" placeholder="Paste a video link" autofocus />
+      <button id="fetchBtn">Fetch</button>
+    </div>
+    <div class="error-box" id="fetchError"></div>
+
+    <div class="preview" id="preview">
+      <img class="thumb" id="thumb" alt="" />
+      <div class="meta">
+        <div class="title" id="title"></div>
+        <div class="sub2" id="sub"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card options" id="options">
+    <div class="optrow">
+      <div class="seg">
+        <button id="modeVideo" class="active">MP4</button>
+        <button id="modeAudio">MP3</button>
+      </div>
+      <label class="sel">Quality
+        <select id="quality"></select>
+      </label>
+    </div>
+    <button class="primary wide" id="downloadBtn">Download</button>
+    <div class="saveto" id="saveTo"></div>
+
+    <div class="progress" id="progress">
+      <div class="bar"><div class="fill" id="fill"></div></div>
+      <div class="ptext">
+        <span id="pstage">Starting...</span>
+        <span id="pinfo"></span>
+      </div>
+      <div class="donerow" id="doneRow">
+        <span class="status-line" id="doneLine"></span>
+        <button class="smallbtn" id="revealBtn">Show in folder</button>
+      </div>
+    </div>
+    <div class="error-box" id="dlError"></div>
+  </div>
+
+  <div class="card">
+    <div class="files-head">
+      <h2>Downloads</h2>
+      <button id="openFolder">Open folder</button>
+    </div>
+    <div class="filelist" id="filelist"><div class="empty">No downloads yet.</div></div>
+  </div>
+
+  <div class="hint">Saved to Desktop\LocalDownloader\downloads</div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let currentUrl = "";
+let mode = "video";
+let pollTimer = null;
+
+const VIDEO_Q = [["best","Best available"],["1080","1080p"],["720","720p"],["480","480p"],["360","360p"]];
+const AUDIO_Q = [["320","320 kbps"],["256","256 kbps"],["192","192 kbps"],["128","128 kbps"]];
+
+function setQualityOptions() {
+  const sel = $("quality");
+  sel.innerHTML = "";
+  (mode === "video" ? VIDEO_Q : AUDIO_Q).forEach(([v, label]) => {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = label;
+    if (v === (mode === "video" ? "best" : "192")) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+function showError(el, msg) {
+  el.textContent = msg;
+  el.classList.add("show");
+}
+function hideError(el) { el.classList.remove("show"); }
+
+function fmtDuration(s) {
+  if (s == null) return "";
+  s = Math.round(s);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  const mm = h ? String(m).padStart(2, "0") : m;
+  return (h ? h + ":" : "") + mm + ":" + String(sec).padStart(2, "0");
+}
+function fmtSize(b) {
+  if (b == null) return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  while (b >= 1024 && i < units.length - 1) { b /= 1024; i++; }
+  return b.toFixed(b >= 10 || i === 0 ? 0 : 1) + " " + units[i];
+}
+
+async function api(path, body) {
+  const opts = body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {};
+  const res = await fetch(path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || "Request failed (" + res.status + ")");
+  return data;
+}
+
+$("fetchBtn").addEventListener("click", fetchInfo);
+$("url").addEventListener("keydown", (e) => { if (e.key === "Enter") fetchInfo(); });
+
+async function fetchInfo() {
+  const url = $("url").value.trim();
+  hideError($("fetchError"));
+  if (!url) return showError($("fetchError"), "Paste a link first.");
+  $("fetchBtn").disabled = true;
+  $("fetchBtn").textContent = "Fetching...";
+  try {
+    const info = await api("/api/info", { url });
+    currentUrl = url;
+    $("title").textContent = info.title;
+    const bits = [info.site, info.uploader];
+    if (info.duration) bits.push(fmtDuration(info.duration));
+    $("sub").textContent = bits.join(" · ");
+    if (info.thumbnail) { $("thumb").src = info.thumbnail; $("thumb").style.display = "block"; }
+    else $("thumb").style.display = "none";
+    $("preview").classList.add("show");
+    $("options").classList.add("show");
+    hideError($("dlError"));
+    $("progress").classList.remove("show");
+    $("doneRow").classList.remove("show");
+    $("downloadBtn").disabled = false;
+    $("downloadBtn").textContent = "Download";
+  } catch (e) {
+    showError($("fetchError"), e.message);
+  } finally {
+    $("fetchBtn").disabled = false;
+    $("fetchBtn").textContent = "Fetch";
+  }
+}
+
+$("modeVideo").addEventListener("click", () => setMode("video"));
+$("modeAudio").addEventListener("click", () => setMode("audio"));
+function setMode(m) {
+  mode = m;
+  $("modeVideo").classList.toggle("active", m === "video");
+  $("modeAudio").classList.toggle("active", m === "audio");
+  setQualityOptions();
+}
+
+$("downloadBtn").addEventListener("click", startDownload);
+
+async function startDownload() {
+  if (!currentUrl) return;
+  hideError($("dlError"));
+  $("doneRow").classList.remove("show");
+  $("downloadBtn").disabled = true;
+  $("downloadBtn").textContent = "Choose a folder...";
+
+  // Ask where to save (native folder dialog), then download straight there.
+  let dest;
+  try {
+    const pick = await api("/api/pick-folder", {});
+    if (pick.cancelled) {
+      $("downloadBtn").disabled = false;
+      $("downloadBtn").textContent = "Download";
+      return;
+    }
+    dest = pick.path;
+  } catch (e) {
+    showError($("dlError"), e.message);
+    $("downloadBtn").disabled = false;
+    $("downloadBtn").textContent = "Download";
+    return;
+  }
+
+  $("saveTo").textContent = "Saving to " + dest;
+  $("saveTo").classList.add("show");
+  $("downloadBtn").textContent = "Downloading...";
+  $("progress").classList.add("show");
+  $("fill").style.width = "0%";
+  $("pstage").textContent = "Starting...";
+  $("pinfo").textContent = "";
+  try {
+    const { id } = await api("/api/download", {
+      url: currentUrl,
+      mode,
+      quality: $("quality").value,
+      dest,
+    });
+    poll(id);
+  } catch (e) {
+    showError($("dlError"), e.message);
+    $("downloadBtn").disabled = false;
+    $("downloadBtn").textContent = "Download";
+  }
+}
+
+function poll(id) {
+  clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    let job;
+    try { job = await api("/api/job/" + id); }
+    catch (e) { clearInterval(pollTimer); return; }
+
+    if (job.status === "downloading") {
+      if (job.percent != null) {
+        $("fill").style.width = job.percent + "%";
+        $("pstage").textContent = "Downloading " + job.percent + "%";
+      } else {
+        $("pstage").textContent = "Downloading...";
+      }
+      $("pinfo").textContent = [job.speed, job.eta ? "ETA " + job.eta : ""].filter(Boolean).join(" · ");
+    } else if (job.status === "processing") {
+      $("pstage").textContent = "Converting...";
+      $("pinfo").textContent = "";
+    } else if (job.status === "finished") {
+      clearInterval(pollTimer);
+      $("fill").style.width = "100%";
+      $("pstage").textContent = "Done";
+      $("pinfo").textContent = "";
+      const line = $("doneLine");
+      line.textContent = "Saved " + job.file + " (" + fmtSize(job.size) + ")";
+      $("revealBtn").onclick = () => {
+        if (job.path) api("/api/reveal", { path: job.path }).catch(() => {});
+      };
+      $("doneRow").classList.add("show");
+      $("downloadBtn").disabled = false;
+      $("downloadBtn").textContent = "Download";
+      loadFiles();
+    } else if (job.status === "error") {
+      clearInterval(pollTimer);
+      $("progress").classList.remove("show");
+      showError($("dlError"), job.error || "Download failed.");
+      $("downloadBtn").disabled = false;
+      $("downloadBtn").textContent = "Download";
+    }
+  }, 400);
+}
+
+async function loadFiles() {
+  try {
+    const list = await api("/api/files");
+    const el = $("filelist");
+    if (!list.length) {
+      el.innerHTML = '<div class="empty">No downloads yet.</div>';
+      return;
+    }
+    el.innerHTML = "";
+    list.forEach((f) => {
+      const row = document.createElement("div");
+      row.className = "file";
+      const ext = document.createElement("span");
+      ext.className = "fext";
+      ext.textContent = f.ext || "file";
+      const a = document.createElement("a");
+      a.href = "/api/file/" + encodeURIComponent(f.name);
+      a.className = "fname";
+      a.textContent = f.name;
+      a.title = f.name;
+      const size = document.createElement("span");
+      size.className = "fsize";
+      size.textContent = fmtSize(f.size);
+      row.append(ext, a, size);
+      el.appendChild(row);
+    });
+  } catch (e) { /* list is non-critical */ }
+}
+
+$("openFolder").addEventListener("click", () => api("/api/open-folder", {}).catch(() => {}));
+
+setQualityOptions();
+loadFiles();
+</script>
+</body>
+</html>
