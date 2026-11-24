@@ -7,8 +7,12 @@ Runs entirely on your own machine — no ads, no telemetry, nothing uploaded any
 
 - **MP4 video** — Best / 1080p / 720p / 480p / 360p
 - **MP3 audio** — 320 / 256 / 192 / 128 kbps via ffmpeg
+- **Spotify playlists & albums** — paste a Spotify link and it downloads every
+  track as MP3 into a folder, then zips it up (track list is read from Spotify,
+  audio is pulled from YouTube via yt-dlp)
 - **Choose where to save** — a native folder picker opens on every download
 - **Live progress** — percentage, speed and ETA while downloading
+  (per-track progress for playlists)
 - **Show in folder** — jump straight to the finished file in Explorer
 - **Remembers your last folder** — the picker opens where you saved last time
 - **Download list** — everything saved to the app folder, with one-click open
@@ -40,6 +44,10 @@ Desktop for one-click access.
 3. **Download** → choose a save folder in the dialog
 4. Watch the progress bar → **Show in folder** when it's done
 
+For **Spotify** links the MP4/MP3 toggle disappears (tracks are always MP3).
+You get a folder with numbered tracks (`01 - Artist - Title.mp3`) plus a
+`.zip` of the whole playlist next to it.
+
 ## Project layout
 
 ```
@@ -55,9 +63,11 @@ LocalDownloader/
 ## Notes
 
 - The server binds to `127.0.0.1` only — it is never reachable from the network.
+- Spotify support reads the public track list from Spotify's embed page — no
+  account or API key needed. Private playlists are not accessible.
 - Some Instagram/X posts require being logged in; if a link fails, open it in
   your browser first.
-- Playlists are not supported — paste a single video link.
+- Playlists on other sites are not supported — paste a single video link.
 
 ## Disclaimer
 

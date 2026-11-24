@@ -1,8 +1,12 @@
 """LocalDownloader - a local web UI for downloading videos as MP4 or MP3."""
 
+import json
 import os
+import re
 import threading
+import urllib.request
 import uuid
+import zipfile
 from pathlib import Path
 
 import uvicorn
@@ -49,6 +53,13 @@ def _set_last_dest(path: Path) -> None:
 VIDEO_QUALITIES = {"best", "2160", "1440", "1080", "720", "480", "360"}
 AUDIO_QUALITIES = {"320", "256", "192", "128"}
 
+# Spotify playlist/album links (the app resolves tracks, audio comes from YouTube)
+SPOTIFY_RE = re.compile(r"open\.spotify\.com/(?:intl-[a-z-]+/)?(playlist|album)/([A-Za-z0-9]+)")
+BROWSER_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0 Safari/537.36"
+)
+
 
 class InfoRequest(BaseModel):
     url: str
@@ -59,6 +70,7 @@ class DownloadRequest(BaseModel):
     mode: str = "video"  # "video" -> mp4, "audio" -> mp3
     quality: str = "best"
     dest: str | None = None  # folder picked by the user; None -> last used
+    limit: int = 0  # spotify: max tracks (0 = all)
 
 
 class PathRequest(BaseModel):
@@ -91,6 +103,168 @@ def _fetch_info(url: str) -> dict:
         "view_count": info.get("view_count"),
         "webpage_url": info.get("webpage_url") or url,
     }
+
+
+def _fetch_spotify_meta(url: str) -> dict:
+    """Resolve a Spotify playlist/album into its track list (no API key needed)."""
+    m = SPOTIFY_RE.search(url)
+    if not m:
+        raise HTTPException(status_code=400, detail="Paste a Spotify playlist or album link.")
+    kind, sid = m.group(1), m.group(2)
+
+    req = urllib.request.Request(
+        f"https://open.spotify.com/embed/{kind}/{sid}",
+        headers={"User-Agent": BROWSER_UA, "Accept": "text/html"},
+    )
+    html = urllib.request.urlopen(req, timeout=25).read().decode("utf-8", "ignore")
+
+    blob = None
+    for mm in re.finditer(r'<script[^>]*type="application/json"[^>]*>(.*?)</script>', html, re.S):
+        if "pageProps" in mm.group(1):
+            blob = json.loads(mm.group(1))
+            break
+    entity = (
+        ((blob or {}).get("props") or {})
+        .get("pageProps", {})
+        .get("state", {})
+        .get("data", {})
+        .get("entity")
+    )
+    if not entity:
+        raise HTTPException(status_code=400, detail="Could not read that Spotify link.")
+
+    tracks = []
+    for t in entity.get("trackList") or []:
+        if t.get("title"):
+            tracks.append(
+                {
+                    "title": t["title"],
+                    "artist": t.get("subtitle") or "",
+                    "duration": t.get("duration") or 0,
+                }
+            )
+    if not tracks:
+        raise HTTPException(status_code=400, detail="That playlist has no tracks (or is private).")
+
+    cover = None
+    sources = (entity.get("coverArt") or {}).get("sources") or []
+    if sources:
+        cover = sources[0].get("url")
+
+    return {
+        "kind": kind,
+        "title": entity.get("name") or entity.get("title") or "Spotify",
+        "cover": cover,
+        "tracks": tracks,
+    }
+
+
+def _safe_name(name: str) -> str:
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", name).strip(" .")
+    return name[:120] or "download"
+
+
+def _resolve_dest(dest: str | None) -> Path:
+    if dest:
+        try:
+            p = Path(dest)
+            if p.is_dir():
+                return p
+        except (OSError, ValueError):
+            pass
+    return DOWNLOAD_DIR
+
+
+def _run_spotify(job_id: str, req: DownloadRequest, meta: dict) -> None:
+    """Download every track of a Spotify playlist/album as MP3, then zip it."""
+    job = _jobs[job_id]
+    dest = _resolve_dest(req.dest)
+    folder = dest / _safe_name(meta["title"])
+    tracks = meta["tracks"][: req.limit] if req.limit > 0 else meta["tracks"]
+    total = len(tracks)
+    failed: list[str] = []
+
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        with _lock:
+            job.update({"status": "error", "error": f"Cannot create folder: {exc}"})
+        return
+
+    with _lock:
+        job.update({"status": "downloading", "total": total, "done": 0, "percent": 0.0})
+
+    for i, t in enumerate(tracks, 1):
+        query = (t["artist"] + " - " + t["title"]).strip(" -")[:150]
+
+        def track_hook(d: dict, _i: int = i, _t: dict = t) -> None:
+            if d.get("status") == "downloading":
+                tot = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+                done_b = d.get("downloaded_bytes") or 0
+                pct = int(done_b * 100 / tot) if tot else 0
+                with _lock:
+                    job["pstage"] = f"Track {_i}/{total} ({pct}%)"
+                    job["current"] = f'{_t["title"]} — {_t["artist"]}' if _t["artist"] else _t["title"]
+
+        opts = {
+            "format": "bestaudio/best",
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": req.quality if req.quality in AUDIO_QUALITIES else "192",
+                }
+            ],
+            "outtmpl": str(folder / f"{i:02d} - %(title).90s [%(id)s].%(ext)s"),
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+            "noprogress": True,
+            "progress_hooks": [track_hook],
+        }
+
+        with _lock:
+            job["pstage"] = f"Track {i}/{total}"
+            job["current"] = f'{t["title"]} — {t["artist"]}' if t["artist"] else t["title"]
+            job["percent"] = round((i - 1) * 100 / total, 1)
+
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                ydl.extract_info("ytsearch1:" + query, download=True)
+        except Exception:  # noqa: BLE001 - one bad track shouldn't kill the playlist
+            failed.append(t["title"])
+
+        with _lock:
+            job["done"] = i
+            job["percent"] = round(i * 100 / total, 1)
+
+    with _lock:
+        job.update({"status": "processing", "pstage": "Creating zip...", "current": ""})
+
+    try:
+        zip_path = dest / (_safe_name(meta["title"]) + ".zip")
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in sorted(folder.iterdir()):
+                if f.is_file() and f.name != "desktop.ini":
+                    zf.write(f, arcname=f"{folder.name}/{f.name}")
+        _set_last_dest(dest)
+        with _lock:
+            job.update(
+                {
+                    "status": "finished",
+                    "percent": 100.0,
+                    "file": zip_path.name,
+                    "path": str(zip_path),
+                    "size": zip_path.stat().st_size,
+                    "failed": len(failed),
+                    "pstage": None,
+                    "current": None,
+                    "error": None,
+                }
+            )
+    except Exception as exc:  # noqa: BLE001
+        with _lock:
+            job.update({"status": "error", "error": _clean_error(exc)})
 
 
 def _build_opts(req: DownloadRequest, job: dict, outdir: Path) -> dict:
@@ -223,6 +397,20 @@ def info(req: InfoRequest) -> JSONResponse:
         raise HTTPException(status_code=400, detail="Please paste a link first.")
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
+
+    if SPOTIFY_RE.search(url):
+        meta = _fetch_spotify_meta(url)
+        return JSONResponse(
+            {
+                "spotify": True,
+                "kind": meta["kind"],
+                "title": meta["title"],
+                "thumbnail": meta["cover"],
+                "site": "Spotify",
+                "track_count": len(meta["tracks"]),
+            }
+        )
+
     try:
         data = _fetch_info(url)
     except HTTPException:
@@ -244,6 +432,10 @@ def download(req: DownloadRequest) -> dict:
     if req.mode == "audio" and req.quality not in AUDIO_QUALITIES:
         raise HTTPException(status_code=400, detail="Invalid audio quality.")
 
+    meta = None
+    if SPOTIFY_RE.search(url):
+        meta = _fetch_spotify_meta(url)  # validates early, raises 400 on bad links
+
     job_id = uuid.uuid4().hex[:12]
     with _lock:
         _jobs[job_id] = {
@@ -256,8 +448,16 @@ def download(req: DownloadRequest) -> dict:
             "path": None,
             "size": None,
             "error": None,
+            "pstage": None,
+            "current": None,
+            "done": 0,
+            "total": 0,
+            "failed": 0,
         }
-    threading.Thread(target=_run_download, args=(job_id, req), daemon=True).start()
+    if meta is not None:
+        threading.Thread(target=_run_spotify, args=(job_id, req, meta), daemon=True).start()
+    else:
+        threading.Thread(target=_run_download, args=(job_id, req), daemon=True).start()
     return {"id": job_id}
 
 

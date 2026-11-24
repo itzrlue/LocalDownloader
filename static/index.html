@@ -339,6 +339,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let currentUrl = "";
+let currentIsSpotify = false;
 let mode = "video";
 let pollTimer = null;
 
@@ -396,11 +397,22 @@ async function fetchInfo() {
   $("fetchBtn").textContent = "Fetching...";
   try {
     const info = await api("/api/info", { url });
+    const wasSpotify = currentIsSpotify;
     currentUrl = url;
+    currentIsSpotify = !!info.spotify;
     $("title").textContent = info.title;
-    const bits = [info.site, info.uploader];
-    if (info.duration) bits.push(fmtDuration(info.duration));
-    $("sub").textContent = bits.join(" · ");
+    if (info.spotify) {
+      $("sub").textContent =
+        (info.kind === "album" ? "Album" : "Playlist") + " · " + info.track_count + " tracks";
+      setMode("audio");
+      document.querySelector(".seg").style.display = "none";
+    } else {
+      const bits = [info.site, info.uploader];
+      if (info.duration) bits.push(fmtDuration(info.duration));
+      $("sub").textContent = bits.join(" · ");
+      document.querySelector(".seg").style.display = "flex";
+      if (wasSpotify) setMode("video");
+    }
     if (info.thumbnail) { $("thumb").src = info.thumbnail; $("thumb").style.display = "block"; }
     else $("thumb").style.display = "none";
     $("preview").classList.add("show");
@@ -463,7 +475,7 @@ async function startDownload() {
   try {
     const { id } = await api("/api/download", {
       url: currentUrl,
-      mode,
+      mode: currentIsSpotify ? "audio" : mode,
       quality: $("quality").value,
       dest,
     });
@@ -483,15 +495,19 @@ function poll(id) {
     catch (e) { clearInterval(pollTimer); return; }
 
     if (job.status === "downloading") {
-      if (job.percent != null) {
+      if (job.pstage) {
+        $("pstage").textContent = job.pstage;
+        $("pinfo").textContent = job.current || "";
+      } else if (job.percent != null) {
         $("fill").style.width = job.percent + "%";
         $("pstage").textContent = "Downloading " + job.percent + "%";
+        $("pinfo").textContent = [job.speed, job.eta ? "ETA " + job.eta : ""].filter(Boolean).join(" · ");
       } else {
         $("pstage").textContent = "Downloading...";
       }
-      $("pinfo").textContent = [job.speed, job.eta ? "ETA " + job.eta : ""].filter(Boolean).join(" · ");
+      if (job.percent != null) $("fill").style.width = job.percent + "%";
     } else if (job.status === "processing") {
-      $("pstage").textContent = "Converting...";
+      $("pstage").textContent = job.pstage || "Converting...";
       $("pinfo").textContent = "";
     } else if (job.status === "finished") {
       clearInterval(pollTimer);
@@ -500,6 +516,7 @@ function poll(id) {
       $("pinfo").textContent = "";
       const line = $("doneLine");
       line.textContent = "Saved " + job.file + " (" + fmtSize(job.size) + ")";
+      if (job.failed) line.textContent += " — " + job.failed + " track(s) skipped";
       $("revealBtn").onclick = () => {
         if (job.path) api("/api/reveal", { path: job.path }).catch(() => {});
       };
