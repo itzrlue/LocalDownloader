@@ -205,6 +205,7 @@ def _run_spotify(job_id: str, req: DownloadRequest, meta: dict) -> None:
                 with _lock:
                     job["pstage"] = f"Track {_i}/{total} ({pct}%)"
                     job["current"] = f'{_t["title"]} — {_t["artist"]}' if _t["artist"] else _t["title"]
+                    job["speed_bps"] = float(d.get("speed") or 0)
 
         opts = {
             "format": "bestaudio/best",
@@ -237,6 +238,7 @@ def _run_spotify(job_id: str, req: DownloadRequest, meta: dict) -> None:
         with _lock:
             job["done"] = i
             job["percent"] = round(i * 100 / total, 1)
+            job["speed_bps"] = 0.0
 
     with _lock:
         job.update({"status": "processing", "pstage": "Creating zip...", "current": ""})
@@ -279,11 +281,13 @@ def _build_opts(req: DownloadRequest, job: dict, outdir: Path) -> dict:
                 job["status"] = "downloading"
                 job["percent"] = round(done * 100 / total, 1) if total else None
                 job["speed"] = (d.get("_speed_str") or "").strip()
+                job["speed_bps"] = float(d.get("speed") or 0)
                 job["eta"] = (d.get("_eta_str") or "").strip()
             elif status == "finished":
                 job["status"] = "processing"
                 job["percent"] = 100.0
                 job["speed"] = ""
+                job["speed_bps"] = 0.0
                 job["eta"] = ""
 
     def postprocessor_hook(d: dict) -> None:
@@ -373,7 +377,7 @@ def _run_download(job_id: str, req: DownloadRequest) -> None:
             )
     except Exception as exc:  # noqa: BLE001 - surfaced to the UI
         with _lock:
-            job.update({"status": "error", "error": _clean_error(exc)})
+            job.update({"status": "error", "error": _clean_error(exc), "speed_bps": 0.0})
 
 
 def _clean_error(exc: Exception) -> str:
@@ -443,6 +447,7 @@ def download(req: DownloadRequest) -> dict:
             "status": "starting",
             "percent": 0.0,
             "speed": "",
+            "speed_bps": 0.0,
             "eta": "",
             "file": None,
             "path": None,

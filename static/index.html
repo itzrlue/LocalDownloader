@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a84ff'/%3E%3Cpath d='M32 14v26M20 30l12 12 12-12M18 50h28' stroke='white' stroke-width='6' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E" />
 <title>LocalDownloader</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -209,6 +210,173 @@
   }
   .saveto.show { display: block; animation: rise 0.3s var(--ease) both; }
 
+  /* --- speed graph --- */
+  .speedwrap { display: none; margin-top: 14px; }
+  .speedwrap.show { display: block; }
+  .speedhead {
+    display: flex;
+    justify-content: space-between;
+    color: var(--text2);
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+  .speedhead b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  #speedCanvas {
+    display: block;
+    width: 100%;
+    height: 76px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+  }
+
+  /* --- file row play button --- */
+  .playbtn {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    background: var(--fill);
+    flex-shrink: 0;
+    color: var(--text);
+  }
+  .playbtn:hover { background: var(--blue); color: #fff; }
+
+  /* --- player bar --- */
+  .playerbar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 60;
+    background: rgba(28,28,30,0.88);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    transform: translateY(115%);
+    transition: transform 0.4s var(--ease);
+    padding: 10px 16px;
+  }
+  .playerbar.show { transform: none; }
+  .pbar-inner {
+    max-width: 980px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .art {
+    width: 42px; height: 42px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #3a3a3c, #232325);
+    border: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text2);
+    font-size: 17px;
+    flex-shrink: 0;
+  }
+  .ptitle { width: 180px; min-width: 0; flex-shrink: 0; }
+  .ptitle .t {
+    font-size: 13px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .ptitle .s { font-size: 11px; color: var(--text2); }
+  .ptransport { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+  .pbtn {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    padding: 0;
+    background: transparent;
+    color: var(--text);
+    font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+    line-height: 1;
+  }
+  .pbtn:hover { background: var(--fill); }
+  .pbtn.main { width: 36px; height: 36px; background: var(--blue); color: #fff; font-size: 14px; }
+  .pbtn.main:hover { background: #3395ff; }
+  .pseek { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 110px; }
+  .ptime {
+    font-size: 11px; color: var(--text2);
+    font-variant-numeric: tabular-nums;
+    width: 36px; text-align: center;
+    flex-shrink: 0;
+  }
+  .pvol { display: flex; align-items: center; flex-shrink: 0; }
+
+  /* --- range sliders --- */
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    height: 18px;
+    margin: 0;
+    cursor: pointer;
+    --p: 0%;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(to right, var(--blue) var(--p), rgba(255,255,255,0.16) var(--p));
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 11px; height: 11px;
+    border-radius: 50%;
+    background: #fff;
+    margin-top: -3.5px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  }
+  input[type="range"]:hover::-webkit-slider-thumb { opacity: 1; }
+  input[type="range"]:focus { outline: none; }
+  #pRange { flex: 1; min-width: 80px; }
+  #pVol { width: 76px; }
+
+  /* --- video modal --- */
+  .vmodal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    background: rgba(0,0,0,0.85);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    align-items: center;
+    justify-content: center;
+  }
+  .vmodal.show { display: flex; animation: rise 0.3s var(--ease) both; }
+  .vbox { max-width: 920px; width: 92vw; }
+  #vVideo {
+    width: 100%;
+    max-height: 74vh;
+    background: #000;
+    border-radius: 12px;
+    outline: none;
+  }
+  .vname {
+    color: var(--text2);
+    font-size: 13px;
+    text-align: center;
+    margin-top: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .vclose {
+    position: absolute;
+    top: 18px; right: 22px;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+    font-size: 15px;
+    padding: 0;
+  }
+  .vclose:hover { background: rgba(255,255,255,0.24); }
+
   .error-box {
     display: none;
     margin-top: 14px;
@@ -317,6 +485,10 @@
         <span id="pstage">Starting...</span>
         <span id="pinfo"></span>
       </div>
+      <div class="speedwrap" id="speedWrap">
+        <div class="speedhead"><span>Download speed</span><b id="speedNow">—</b></div>
+        <canvas id="speedCanvas"></canvas>
+      </div>
       <div class="donerow" id="doneRow">
         <span class="status-line" id="doneLine"></span>
         <button class="smallbtn" id="revealBtn">Show in folder</button>
@@ -334,6 +506,40 @@
   </div>
 
   <div class="hint">Saved to Desktop\LocalDownloader\downloads</div>
+</div>
+
+<!-- sticky player -->
+<div class="playerbar" id="playerBar">
+  <div class="pbar-inner">
+    <div class="art">&#9834;</div>
+    <div class="ptitle">
+      <div class="t" id="pTitle">—</div>
+      <div class="s">LocalDownloader</div>
+    </div>
+    <div class="ptransport">
+      <button class="pbtn" id="pPrev" title="Previous">&#9198;</button>
+      <button class="pbtn main" id="pPlay" title="Play/Pause">&#9654;</button>
+      <button class="pbtn" id="pNext" title="Next">&#9197;</button>
+    </div>
+    <div class="pseek">
+      <span class="ptime" id="pCur">0:00</span>
+      <input type="range" id="pRange" min="0" max="1000" value="0" title="Seek" />
+      <span class="ptime" id="pDur">0:00</span>
+    </div>
+    <div class="pvol">
+      <input type="range" id="pVol" min="0" max="100" value="90" title="Volume" />
+    </div>
+    <button class="pbtn" id="pClose" title="Close player">&#10005;</button>
+  </div>
+</div>
+
+<!-- video player modal -->
+<div class="vmodal" id="vModal">
+  <button class="vclose" id="vClose" title="Close">&#10005;</button>
+  <div class="vbox">
+    <video id="vVideo" controls playsinline preload="metadata"></video>
+    <div class="vname" id="vName"></div>
+  </div>
 </div>
 
 <script>
@@ -386,6 +592,89 @@ async function api(path, body) {
   return data;
 }
 
+/* ---------- speed graph ---------- */
+let speedSamples = [];
+const MAX_SAMPLES = 90; // ~36s at 400ms
+
+function fmtSpeed(bps) {
+  if (!bps || bps <= 0) return "—";
+  if (bps >= 1073741824) return (bps / 1073741824).toFixed(1) + " GB/s";
+  if (bps >= 1048576) return (bps / 1048576).toFixed(1) + " MB/s";
+  if (bps >= 1024) return Math.round(bps / 1024) + " KB/s";
+  return Math.round(bps) + " B/s";
+}
+
+function resetSpeed() {
+  speedSamples = [];
+  $("speedNow").textContent = "—";
+  drawSpeed();
+}
+function pushSpeed(v) {
+  speedSamples.push(v || 0);
+  if (speedSamples.length > MAX_SAMPLES) speedSamples.shift();
+  drawSpeed();
+}
+function drawSpeed() {
+  const c = $("speedCanvas");
+  if (!c || !c.clientWidth) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== Math.round(w * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+  const ctx = c.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  const pad = { l: 8, r: 8, t: 10, b: 10 };
+  const data = speedSamples.length ? speedSamples : [0];
+  const n = data.length;
+  const peak = Math.max.apply(null, data);
+  const steps = [65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608,
+                 16777216, 33554432, 67108864, 134217728, 268435456, 536870912, 1073741824];
+  const yMax = steps.find((s) => s >= peak * 1.2) || peak * 1.2 || 1048576;
+  const innerW = w - pad.l - pad.r, innerH = h - pad.t - pad.b;
+  const X = (i) => pad.l + (n <= 1 ? innerW : (innerW * i) / (n - 1));
+  const Y = (v) => pad.t + innerH * (1 - Math.min(v / yMax, 1));
+
+  // grid + labels
+  ctx.strokeStyle = "rgba(255,255,255,0.07)";
+  ctx.fillStyle = "rgba(255,255,255,0.32)";
+  ctx.font = "9px -apple-system, 'Segoe UI', sans-serif";
+  ctx.lineWidth = 1;
+  for (let g = 1; g <= 2; g++) {
+    const y = pad.t + (innerH * g) / 3;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
+    ctx.fillText(fmtSpeed(yMax * (1 - g / 3)), pad.l + 2, y - 3);
+  }
+
+  // filled area
+  ctx.beginPath();
+  ctx.moveTo(X(0), Y(data[0]));
+  for (let i = 1; i < n; i++) ctx.lineTo(X(i), Y(data[i]));
+  ctx.lineTo(X(n - 1), pad.t + innerH);
+  ctx.lineTo(X(0), pad.t + innerH);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + innerH);
+  grad.addColorStop(0, "rgba(10,132,255,0.40)");
+  grad.addColorStop(1, "rgba(10,132,255,0.02)");
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // line
+  ctx.beginPath();
+  ctx.moveTo(X(0), Y(data[0]));
+  for (let i = 1; i < n; i++) ctx.lineTo(X(i), Y(data[i]));
+  ctx.strokeStyle = "#0a84ff";
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+
+  // live dot
+  ctx.beginPath();
+  ctx.arc(X(n - 1), Y(data[n - 1]), 2.8, 0, Math.PI * 2);
+  ctx.fillStyle = "#0a84ff";
+  ctx.fill();
+}
+window.addEventListener("resize", drawSpeed);
+
 $("fetchBtn").addEventListener("click", fetchInfo);
 $("url").addEventListener("keydown", (e) => { if (e.key === "Enter") fetchInfo(); });
 
@@ -419,6 +708,8 @@ async function fetchInfo() {
     $("options").classList.add("show");
     hideError($("dlError"));
     $("progress").classList.remove("show");
+    $("speedWrap").classList.remove("show");
+    resetSpeed();
     $("doneRow").classList.remove("show");
     $("downloadBtn").disabled = false;
     $("downloadBtn").textContent = "Download";
@@ -469,6 +760,8 @@ async function startDownload() {
   $("saveTo").classList.add("show");
   $("downloadBtn").textContent = "Downloading...";
   $("progress").classList.add("show");
+  $("speedWrap").classList.add("show");
+  resetSpeed();
   $("fill").style.width = "0%";
   $("pstage").textContent = "Starting...";
   $("pinfo").textContent = "";
@@ -495,6 +788,8 @@ function poll(id) {
     catch (e) { clearInterval(pollTimer); return; }
 
     if (job.status === "downloading") {
+      pushSpeed(job.speed_bps);
+      $("speedNow").textContent = fmtSpeed(job.speed_bps);
       if (job.pstage) {
         $("pstage").textContent = job.pstage;
         $("pinfo").textContent = job.current || "";
@@ -511,6 +806,7 @@ function poll(id) {
       $("pinfo").textContent = "";
     } else if (job.status === "finished") {
       clearInterval(pollTimer);
+      $("speedWrap").classList.remove("show");
       $("fill").style.width = "100%";
       $("pstage").textContent = "Done";
       $("pinfo").textContent = "";
@@ -526,6 +822,7 @@ function poll(id) {
       loadFiles();
     } else if (job.status === "error") {
       clearInterval(pollTimer);
+      $("speedWrap").classList.remove("show");
       $("progress").classList.remove("show");
       showError($("dlError"), job.error || "Download failed.");
       $("downloadBtn").disabled = false;
@@ -540,12 +837,29 @@ async function loadFiles() {
     const el = $("filelist");
     if (!list.length) {
       el.innerHTML = '<div class="empty">No downloads yet.</div>';
+      queue = [];
       return;
     }
     el.innerHTML = "";
+    queue = [];
     list.forEach((f) => {
+      const playable = PLAYABLE.includes(f.ext);
+      if (playable) {
+        queue.push({ name: f.name, title: displayTitle(f.name), ext: f.ext, video: VIDEO_EXTS.includes(f.ext) });
+      }
       const row = document.createElement("div");
       row.className = "file";
+      if (playable) {
+        const btn = document.createElement("button");
+        btn.className = "playbtn";
+        btn.title = VIDEO_EXTS.includes(f.ext) ? "Play video" : "Play";
+        btn.textContent = "▶";
+        btn.addEventListener("click", () => {
+          if (VIDEO_EXTS.includes(f.ext)) openVideo(f.name);
+          else playAt(queue.findIndex((q) => q.name === f.name));
+        });
+        row.appendChild(btn);
+      }
       const ext = document.createElement("span");
       ext.className = "fext";
       ext.textContent = f.ext || "file";
@@ -564,6 +878,130 @@ async function loadFiles() {
 }
 
 $("openFolder").addEventListener("click", () => api("/api/open-folder", {}).catch(() => {}));
+
+/* ---------- built-in player ---------- */
+const PLAYABLE = ["mp3", "m4a", "wav", "ogg", "opus", "aac", "mp4", "webm", "mov"];
+const VIDEO_EXTS = ["mp4", "webm", "mov"];
+let queue = [];
+let qIndex = -1;
+
+const audio = new Audio();
+audio.volume = 0.9;
+window._audio = audio; // exposed for testing/tinkering
+
+function displayTitle(name) {
+  return name
+    .replace(/\.[a-z0-9]+$/i, "")
+    .replace(/^\d+\s*-\s*/, "")
+    .replace(/\s*\[[^\]]*\]$/, "");
+}
+function fmtTime(s) {
+  if (!isFinite(s) || s < 0) return "0:00";
+  s = Math.floor(s);
+  const m = Math.floor(s / 60), sec = s % 60;
+  return (m >= 60 ? Math.floor(m / 60) + ":" + String(m % 60).padStart(2, "0") : m + ":") + String(sec).padStart(2, "0");
+}
+function setRangeFill(input, pct) {
+  input.style.setProperty("--p", Math.max(0, Math.min(100, pct)) + "%");
+}
+
+function showBar() { $("playerBar").classList.add("show"); }
+function updatePlayIcon() {
+  $("pPlay").innerHTML = audio.paused ? "&#9654;" : "&#10073;&#10073;";
+}
+
+function playAt(idx) {
+  if (idx < 0 || idx >= queue.length) return;
+  qIndex = idx;
+  const f = queue[idx];
+  audio.src = "/api/file/" + encodeURIComponent(f.name);
+  audio.play().catch(() => {});
+  $("pTitle").textContent = f.title;
+  $("pTitle").title = f.title;
+  showBar();
+  updatePlayIcon();
+  if ("mediaSession" in navigator) {
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({ title: f.title, artist: "LocalDownloader" });
+    } catch (e) { /* unsupported */ }
+  }
+}
+function togglePlay() {
+  if (qIndex < 0 && queue.length) return playAt(0);
+  if (audio.paused) audio.play().catch(() => {});
+  else audio.pause();
+}
+function nextTrack() { if (queue.length) playAt((qIndex + 1) % queue.length); }
+function prevTrack() {
+  if (!queue.length) return;
+  if (audio.currentTime > 3) { audio.currentTime = 0; return; }
+  playAt((qIndex - 1 + queue.length) % queue.length);
+}
+
+$("pPlay").addEventListener("click", togglePlay);
+$("pNext").addEventListener("click", nextTrack);
+$("pPrev").addEventListener("click", prevTrack);
+$("pClose").addEventListener("click", () => {
+  audio.pause();
+  $("playerBar").classList.remove("show");
+});
+audio.addEventListener("play", updatePlayIcon);
+audio.addEventListener("pause", updatePlayIcon);
+audio.addEventListener("ended", nextTrack);
+audio.addEventListener("loadedmetadata", () => { $("pDur").textContent = fmtTime(audio.duration); });
+audio.addEventListener("timeupdate", () => {
+  $("pCur").textContent = fmtTime(audio.currentTime);
+  const pct = audio.duration ? (audio.currentTime / audio.duration) * 100 : 0;
+  $("pRange").value = Math.round(pct * 10);
+  setRangeFill($("pRange"), pct);
+});
+$("pRange").addEventListener("input", () => {
+  const pct = $("pRange").value / 10;
+  setRangeFill($("pRange"), pct);
+  if (audio.duration) audio.currentTime = (pct / 100) * audio.duration;
+});
+$("pVol").addEventListener("input", () => {
+  audio.volume = $("pVol").value / 100;
+  setRangeFill($("pVol"), $("pVol").value);
+});
+setRangeFill($("pVol"), 90);
+
+try {
+  if ("mediaSession" in navigator) {
+    navigator.mediaSession.setActionHandler("play", () => audio.play().catch(() => {}));
+    navigator.mediaSession.setActionHandler("pause", () => audio.pause());
+    navigator.mediaSession.setActionHandler("previoustrack", prevTrack);
+    navigator.mediaSession.setActionHandler("nexttrack", nextTrack);
+  }
+} catch (e) { /* unsupported */ }
+
+document.addEventListener("keydown", (e) => {
+  const tag = (document.activeElement && document.activeElement.tagName) || "";
+  if (e.code === "Space" && !["INPUT", "TEXTAREA", "SELECT"].includes(tag)) {
+    e.preventDefault();
+    togglePlay();
+  }
+  if (e.key === "Escape") closeVideo();
+});
+
+/* ---------- video modal ---------- */
+function openVideo(name) {
+  const v = $("vVideo");
+  v.src = "/api/file/" + encodeURIComponent(name);
+  $("vName").textContent = displayTitle(name);
+  $("vModal").classList.add("show");
+  v.play().catch(() => {});
+}
+function closeVideo() {
+  const v = $("vVideo");
+  if (!$("vModal").classList.contains("show")) return;
+  v.pause();
+  v.removeAttribute("src");
+  v.load();
+  $("vModal").classList.remove("show");
+}
+$("vClose").addEventListener("click", closeVideo);
+$("vModal").addEventListener("click", (e) => { if (e.target === $("vModal")) closeVideo(); });
 
 setQualityOptions();
 loadFiles();

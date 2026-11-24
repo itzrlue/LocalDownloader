@@ -3,10 +3,16 @@
 A simple local app for downloading videos as **MP4** or extracting audio as **MP3**.
 Runs entirely on your own machine — no ads, no telemetry, nothing uploaded anywhere.
 
+![LocalDownloader UI](docs/screenshot.png)
+
 ## Features
 
 - **MP4 video** — Best / 1080p / 720p / 480p / 360p
 - **MP3 audio** — 320 / 256 / 192 / 128 kbps via ffmpeg
+- **Live speed graph** — watch the download speed in real time
+- **Built-in player** — play MP3s in the sticky bottom bar (seek, volume,
+  prev/next, media keys) and MP4s in a centered video player; every download
+  gets a one-click play button
 - **Spotify playlists & albums** — paste a Spotify link and it downloads every
   track as MP3 into a folder, then zips it up (track list is read from Spotify,
   audio is pulled from YouTube via yt-dlp)
