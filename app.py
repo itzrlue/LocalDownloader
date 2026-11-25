@@ -542,6 +542,8 @@ def get_file(name: str) -> FileResponse:
 
 
 def main() -> None:
+    if "--open" in __import__("sys").argv:
+        threading.Timer(1.0, lambda: os.startfile(f"http://{HOST}:{PORT}")).start()
     uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
 
 
